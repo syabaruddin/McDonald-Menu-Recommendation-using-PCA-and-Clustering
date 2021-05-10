@@ -1,0 +1,444 @@
+---
+title: "McDonald Menu Recommendations Based on Nutritions using PCA and Clustering"
+author: "By : Syabaruddin Malik"
+output:
+  html_document:
+    df_print: paged
+    highlight: tango
+    theme: cosmo
+    toc: true
+    toc_float:
+      collapsed: yes
+    number_sections : True
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  message = FALSE,
+  warning = FALSE,
+  fig.align = "center",
+  comment = "#>")
+options(scipen = 9999)
+
+```
+
+# Introduction
+
+![](C:/SyabaruddinFolder/Work/Algoritma/DATAScicourse/UnsupervisedMachineLearning/LBBUL/mcd.png)
+
+Hello Everyone! We are back again yet with another project. This is my submission for Unsupervised Learning project.We are going to provide recommendations for McDonald Menu based on Nutritions using PCA and Clustering
+
+
+The dataset can be obtained through https://www.kaggle.com/mcdonalds/nutrition-facts .
+
+This dataset provides a nutrition analysis of every menu item on the US McDonald's menu, including breakfast, beef burgers, chicken and fish sandwiches, fries, salads, soda, coffee and tea, milkshakes, and desserts.
+
+Let’s get started!
+
+# Data Preparation
+
+## Library Setup
+
+Before we do analysis, we need to load the required library packages.
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(ggpubr)
+library(FactoMineR)
+library(factoextra) # fviz_pca_ind(), fviz_eig()
+library(tictoc)
+library(scales)
+library(plotly)
+library(GGally)
+library(esquisse)
+```
+
+## Import Data
+
+We need the data to do the analysis. Then, we have to load the dataset
+
+```{r}
+mcd <- read.csv("menu.csv")
+```
+
+
+# Exploratory Data Analysis
+
+## Check Data Types 
+
+Select all the columns needed then check the columns data types. Then change the data types for each columns' data type that needs to be changed
+
+```{r}
+menu <- mcd %>% 
+        mutate(Vitamin.A = Vitamin.A....Daily.Value.,
+               Vitamin.C = Vitamin.C....Daily.Value.,
+               Calcium = Calcium....Daily.Value.,
+               Iron = Iron....Daily.Value.,
+               Fat = Total.Fat) %>% 
+        select(-Calories.from.Fat,-Total.Fat....Daily.Value.,
+               -Saturated.Fat....Daily.Value.,-Trans.Fat,
+               -Cholesterol....Daily.Value.,-Sodium....Daily.Value.,
+               -Carbohydrates....Daily.Value.,
+               -Dietary.Fiber....Daily.Value.,
+               -Vitamin.A....Daily.Value.,
+               -Vitamin.C....Daily.Value.,
+               -Calcium....Daily.Value.,
+               -Iron....Daily.Value.,
+               -Serving.Size,
+               -Saturated.Fat,
+               -Total.Fat) %>% 
+            mutate_if(is.character,as.factor)
+  
+glimpse(menu)
+```
+
+```{r}
+head(menu)
+```
+
+```{r}
+colnames(menu)
+```
+```{r}
+menu_num <- menu %>% select_if(is.numeric)
+```
+
+
+## Check Missing values
+
+We have to check if there is any missing values in our data set
+
+```{r}
+colSums(is.na(menu))
+```
+There are no missing values in our data set. Now we are ready to go to the data analysis.
+
+## Data Analysis
+
+To get to know more about our data, let us check the summary.
+
+```{r}
+summary(menu)
+```
+```{r }
+ggplot(gather(menu %>% select_if(is.numeric)), aes(value)) + 
+    geom_histogram(bins = 10,fill="firebrick") + 
+    facet_wrap(~key, scales = 'free_x',nrow=3) +
+  theme_bw()
+```
+
+If we look at summary and visualization above at all the nutrients column, we found that max value for each nutrients is far from the mean and median value. We can conclude that the data have outlier. We will check later using PCA to found the outliers.
+
+Now let's take a look at below visualization of nutrients per category.
+
+```{r fig.height= 20, fig.width= 15}
+a <- ggplot(data = menu, aes(x = Calcium, y = Category, fill = Category)) + geom_boxplot(show.legend = F, alpha = 0.3) + theme_grey() + labs(title = "Calcium") 
+b <- ggplot(data = menu, aes(x = Calories, y = Category, fill = Category)) + geom_boxplot(show.legend = F, alpha = 0.3) + theme_grey() + labs(title = "Calories")  
+c <- ggplot(data = menu, aes(x = Carbohydrates, y = Category, fill = Category)) + geom_boxplot(show.legend = F, alpha = 0.3) + theme_grey() + labs(title = "Carbohydrates")  
+d <- ggplot(data = menu, aes(x = Cholesterol, y = Category, fill = Category)) + geom_boxplot(show.legend = F, alpha = 0.3) + theme_grey() + labs(title = "Cholesterol")  
+e <- ggplot(data = menu, aes(x = Dietary.Fiber, y = Category, fill = Category)) + geom_boxplot(show.legend = F, alpha = 0.3) + theme_grey() + labs(title = "Dietary.Fiber") 
+f <- ggplot(data = menu, aes(x = Fat, y = Category, fill = Category)) + geom_boxplot(show.legend = F, alpha = 0.3) + theme_grey() + labs(title = "Fat")  
+g <- ggplot(data = menu, aes(x = Iron, y = Category, fill = Category)) + geom_boxplot(show.legend = F, alpha = 0.3) + theme_grey() + labs(title = "Iron") 
+h <- ggplot(data = menu, aes(x = Protein, y = Category, fill = Category)) + geom_boxplot(show.legend = F, alpha = 0.3) + theme_grey() + labs(title = "Protein")  
+i <- ggplot(data = menu, aes(x = Sodium, y = Category, fill = Category)) + geom_boxplot(show.legend = F, alpha = 0.3) + theme_grey() + labs(title = "Sodium")  
+j <- ggplot(data = menu, aes(x = Sugars, y = Category, fill = Category)) + geom_boxplot(show.legend = F, alpha = 0.3) + theme_grey() + labs(title = "Sugars")  
+k <- ggplot(data = menu, aes(x = Vitamin.A, y = Category, fill = Category)) + geom_boxplot(show.legend = F, alpha = 0.3) + theme_grey() + labs(title = "Vitamin.A")  
+l <- ggplot(data = menu, aes(x = Vitamin.C, y = Category, fill = Category)) + geom_boxplot(show.legend = F, alpha = 0.3) + theme_grey() + labs(title = "Vitamin.C") 
+
+ggpubr::ggarrange(a,b,c,d,e,f,g,h,i,j,k,l,
+                  ncol = 2, nrow = 6)
+  
+```
+Summary from plot above:
+
++ Salad has the highest both Vitamin A and Vitamin C, and also Dietery Fiber.
++ Smoothies and Shakes has the highest Sugars, Calcium, and Carbohydrates.
++ In terms of Sodium, Chicken&Fish, Breakfast, and Beef&Pork have the highest Sodium.
++ Almost all food menu have averagely the same protein, iron, cholesterols nutrients value
+
+Now let us check the correlation between numerical variables
+
+```{r fig.height=8,fig.width=8}
+ggcorr(menu,label = T)
+```
+Based on this result, we can see that there are some of the variables that has a strong positive correlation. We will try to reduce the dimension using PCA.
+
+# Unsupervised Learning using: PCA
+
+PCA is mathematically defined as an orthogonal linear transformation that transforms the data to a new coordinate system such that the greatest variance by some projection of the data comes to lie on the first coordinate (called the first principal component), the second greatest variance on the second coordinate, and so on. In other words, we convert a set of observations of possibly correlated variables into a set of values of linearly uncorrelated variables called principal components.
+
+The objective of PCA is to find Q, so that such a linear transformation is possible. By using nearZeroVar we are able to show that to eliminate ~50% of the original predictors we still retain enough information. PCA shares the same objective as nearZeroVar, but does it differently: it looks for correlation within our data and use that redundancy to create a new matrix Z with just enough dimensions to explain most of the variance in the original data. The new variables of matrix Z are called principal components.
+
+## Data Pre-processing (Scaling)
+
+```{r}
+# making index for quantitative and qualitative variables
+quanti_var <- c(3:14)
+quali_var <- c(1:2)
+```
+
+
+## Choosing the PC
+
+FactoMineR package for function PCA()
+
+```{r}
+pca_menu <- PCA(X = menu, # data
+                 scale.unit = T, # scaling
+                 quali.sup = quali_var, # data categorical (the number)
+                 graph = F) # F = not showing the plot
+                 # ncp = 10) # default = 5
+pca_menu$eig
+```
+
+```{r}
+fviz_eig(pca_menu, ncp = 12, 
+         addlabels = T, main = "Variance explained by each dimensions")
+```
+
+```{r}
+summary(pca_menu)
+```
+
+
+Through the PCA, I can retain some informative PC (high in cumulative variance) to perform dimension reduction. By doing this, I can reduce the dimension of the variables while also retaining as much information as possible.
+
+Based on Plot and Summary above, I would like to retain at least 80% of the data. Therefore I am going to choose Dim 1-4
+
+
+## PCA Visualization
+
+### Individual Factor Map
+
+```{r fig.width=10, fig.height=7}
+plot.PCA(x = pca_menu,
+         choix = "ind", # individual plot
+         invisible = "quali", # to make the category tables invisible
+         select = "contrib5", # 5 outliers
+         habillage = 1)  # color the dots depends on ...
+```
+
+Through the individual plot of PCA, dim 1 could cover 46.30% variance of data.
+
+We also found the 5 outlier to be (depends on the menu Category):
+
++ 4 from Breakfast Menu : 35, 32, 33, 29
++ 1 from Chicken and fish menu: 83
+
+### Variable Factor Map
+
+To represent more than two components tha variables will be positioned inside the circle of correlation. If the variable is closer to the circle (outside), that means the variable can reconstruct it better from the first two components. If the variable is closed to the center of the plot (inside), that means the variable is less important for the two components.
+
+```{r}
+fviz_pca_var(pca_menu , select.var = list(contrib = 20), col.var = "contrib", 
+             gradient.cols = c("cyan", "gold", "maroon"), repel = TRUE)
+```
+
+
+```{r}
+fviz_contrib(X = pca_menu, 
+             choice = "var", # lihat kontribusi berdasarkan variable
+             axes = 1) # PC yang ingin di tampilkan
+```
+
+Fat, Protein, Sodium, Calories, Iron, Dietery Fiber, Cholesterol are the most nutrients contributed to dimension 1
+
+```{r}
+fviz_contrib(X = pca_menu, 
+             choice = "var", # lihat kontribusi berdasarkan variable
+             axes = 2) # PC yang ingin di tampilkan
+```
+
+Sugar, Carbohydrates, and Calcium are the most nutrients contributed to dimension 2
+
+
+```{r}
+
+fviz_contrib(X = pca_menu, 
+             choice = "var", # lihat kontribusi berdasarkan variable
+             axes = 3) # PC yang ingin di tampilkan
+```
+
+Vitamin A,C, and Dietery Fiber are the most nutrients contributed to dimension 3
+
+```{r}
+
+fviz_contrib(X = pca_menu, 
+             choice = "var", # lihat kontribusi berdasarkan variable
+             axes = 4) # PC yang ingin di tampilkan
+```
+
+
+Vitamin C is the most nutrients contributed to dimension 4
+
+
+# Unsupervised Learning using: Clustering
+
+Clustering is an unsupervised machine learning task. It involves automatically discovering natural grouping in data. Unlike supervised learning (like predictive modeling), clustering algorithms only interpret the input data and find natural groups or clusters in feature space
+
+
+## Scaling
+
+Clustering must only use the numerical variables
+
+```{r}
+head(menu_num)
+```
+
+We need to scale our data since all data is numerical data to avoid bias in the result
+
+```{r}
+menu_num_scale <- scale(menu_num)
+```
+
+
+## Finding Optimum K
+
+We need to find the optimum K to do K-Means Clustering. K is the number clusters to our model.
+
+There are some methods available to find the optimum K. However we will use Elbow Method for this project.
+
+Choosing the number of clusters using elbow method is arbitrary. The rule of thumb is we choose the number of cluster in the area of “bend of an elbow”, where the graph is total within sum of squares start to stagnate with the increase of the number of clusters.
+
+```{r, fig.height=12, fig.width=10}
+fviz_nbclust(menu_num_scale, kmeans, method = "wss", k.max = 30)+ labs(subtitle = "Elbow method") + theme_bw()
+```
+
+If we look at above clustering plot above, It seems the "elbow" is k=11.
+
+## K-Means Clustering
+
+Now we will implement our K optimum (k=11) to clustering process. We also will create new column cluster for to observe each classification
+
+```{r}
+RNGkind(sample.kind = "Rounding")
+set.seed(999)
+
+# k-means clustering
+menu_clust <- kmeans(menu_num_scale, centers = 11)
+```
+
+The amount of observations for each clusters are:
+
+```{r}
+menu_clust$size
+```
+
+## Goodness of Fit
+
+A good clustering results can be looked by 3 aspects, Within Sum of Squares (withinss), Between Sum of Squares (betweenss) and Total Sum of Squares (totss).
+
+Within Sum of Squares (withinss): sum of squares distance from each observation to centroid of each cluster.
+
+```{r}
+menu_clust$withinss
+```
+
+Between Sum of Squares (betweenss): sum of squares distance from each centroid to global average. Based on the number of observations in the cluster.
+
+```{r}
+menu_clust$betweenss
+```
+Total Sum of Squares (totss): sum of squares distance from each observation to global average.
+
+```{r}
+menu_clust$totss
+```
+A good clustering should have:
+
+BSS/TSS that is closer to 1.
+
+```{r}
+menu_clust$betweenss/menu_clust$totss
+```
+Result of clustering has great accuracy in 81 %, which means is good accuracy.
+
+
+## Clustering Analysis
+
+
+### Cluster Profiling
+
+let us determine each cluster characteristics
+
+```{r}
+menu$cluster <- menu_clust$cluster
+
+menu1 <- menu[,3:15]
+
+menu1 %>% 
+  group_by(cluster) %>% 
+  summarise_all(mean) %>% 
+  head(11)
+
+```
+Based on result above, below are profiles on each clusters:
+
++ Cluster 1 foods has almost no nutrient values and calories.
++ Cluster 2 foods has very high cholesterol, pretty high iron, mid sodium, mid calories
++ Cluster 3 foods has high calcium, but low in Vit C and dietery fiber
++ Cluster 4 foods has pretty high calories, mid sodium, mid dietery fiber, good protein, pretty high iron and fat.
++ Cluster 5 foods has pretty high sugars, pretty high carbohydrates, very low protein, very low sodium very low iron and very low fat.
++ Cluster 6 foods has very high Vitamin C, very low Vitamin A, very low cholesterol, very low sodium.
++ Cluster 7 foods has very high Vitamin A, pretty high dietery fiber. 
++ Cluster 8 foods has very high calories, very high cholesterol, very high sodium, very high carbohydrates, very high dietery fiber, very high       protein, very high iron, very high fat.
++ Cluster 9 foods has mid of everything.
++ Cluster 10 foods has very high sugar, very high calcium, high fat, high calories, low dietery fiber and zero vitamin c.
++ Cluster 11 foods has prett high sugars, high calcium, zero vitamin c,
+
+
+### Clustering Plot
+
+Below is the plot of the clusters
+
+```{r fig.width=15, fig.height=15}
+fviz_cluster(ggtheme = theme_bw() ,
+             object=menu_clust,
+             data = menu_num_scale,ellipse.alpha = 0.1,
+             labelsize = 10)
+```
+
+### Recommendation Example
+
+#### Example 1
+
+If the customers want a food with high vitamin C, what food should we recommend?
+
+On the profiling result, we can see that food with very high vitamin C is in Cluster 6,
+
+So we can filter all the foods in Cluster 6
+
+```{r}
+menu %>% select(-Category) %>% 
+  filter(cluster==6)
+```
+So if the customers want foods with high vitamin C, we can recommend them to order Fruit and Maple Oatmeal, Apple Slices, and Minute Maid juice.
+
+#### Example 2
+
+If the customers want another burger options besides Big Mac, what food should we recommend?
+
+We can check first in what cluster Big Mac is.
+
+```{r}
+menu %>% filter(Item=="Big Mac")
+```
+Now we know that Big Mac is in cluster 4. Now we can check all the foods in cluster 4
+
+```{r}
+menu %>% filter(cluster==4)
+```
+So after we filter cluster 4, we found out that we have a lot of options in cluster 4 to be recommended. If we want to be more specific, we can propose them foods in cluster 4 with the same category as Big Mac, such as Quarter Pound Burger, Double Quarter Pounder Burger, or Bacon Clubhouse Burger.
+
+
+# Conclusion
+
+After exploring our dataset by using PCA and K-Means for clustering, we are able to conclude that:
+
++ McDonald menu listed on this dataset are able to be separated into 11 Clusters.
++ We can reduce our dimensions from 12 features into 4 dimensions to retain at least 80% of the data.
++ By using the profiling, we could recommend foods to the customers by using the nutrition characteristics that were recognized by the model.
+
+
